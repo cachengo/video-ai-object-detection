@@ -1,0 +1,4 @@
+contextlib2
+cython
+sk-video
+tensorflow-cpu
