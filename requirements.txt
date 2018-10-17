@@ -1,4 +1,7 @@
+celery
 contextlib2
 cython
+flask
+redis
 sk-video
-tensorflow-cpu
+tensorflow

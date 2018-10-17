@@ -21,10 +21,11 @@ def import_model(model_name):
     model_file = model_name + '.tar.gz'
     download_base = 'http://download.tensorflow.org/models/object_detection/'
     path_to_graph = model_name + '/frozen_inference_graph.pb'
-    path_to_labels = os.path.join('/home/lafonj/Documents/Github/models/research/object_detection/data', 'mscoco_label_map.pbtxt')
+    path_to_labels = os.path.join('/models/research/object_detection/data', 'mscoco_label_map.pbtxt')
 
     if not os.path.isfile(path_to_graph):
         opener = urllib.request.URLopener()
+        print(download_base + model_file)
         opener.retrieve(download_base + model_file, model_file)
         tar_file = tarfile.open(model_file)
         for file in tar_file.getmembers():
@@ -104,6 +105,5 @@ class ObjectDetector:
                 image_np,
                 tensor_dict=tensor_dict
             )
-            print('One image done')
 
-        print('Finished')
+        print('Finished video')

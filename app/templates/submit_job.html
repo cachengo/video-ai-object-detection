@@ -1,0 +1,27 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Video Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ext/bootstrap.min.css') }}">
+  </head>
+
+  <body>
+    <nav class="navbar navbar-light bg-light justify-content-between"">
+      <a class="navbar-brand" href="#">
+        <img src="{{ url_for('static', filename='img/cachengo_logo.png') }}" height="30" width="119" alt="">
+      </a>
+    </nav>
+    <div class="app container">
+      <form action="/" method="post">
+        <div class="form-group row">
+          <label for="video_url">Video Url</label>
+          <input type="text" class="form-control" id="video_url" placeholder="Enter video url" name="video_url">
+        </div>
+        <button id="submit-url" class="btn btn-dark btn-lg" type="submit">Submit</button>
+      </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/ext/bootstrap.min.js') }}"></script>
+    </body>
+</html>
