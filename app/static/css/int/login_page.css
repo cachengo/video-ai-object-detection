@@ -1,0 +1,10 @@
+.app canvas{
+    display: none;
+}
+
+#camera-stream.invisible,
+#error-message.invisible,
+#start-camera.invisible
+{
+    display: none;
+}
