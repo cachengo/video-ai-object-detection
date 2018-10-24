@@ -12,10 +12,6 @@ from object_detection.utils import ops as utils_ops
 from object_detection.utils import label_map_util
 
 
-if StrictVersion(tf.__version__) < StrictVersion('1.9.0'):
-    raise ImportError('Please upgrade your TensorFlow installation to v1.9.* or later!')
-
-
 def import_model(model_name):
 
     model_file = model_name + '.tar.gz'
