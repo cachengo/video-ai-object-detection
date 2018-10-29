@@ -10,11 +10,11 @@ fi
 if [ "$CONTAINER_ROLE" = "inference" ];
 then
     echo "Role is: $CONTAINER_ROLE";
-    celery -A app.celery worker -Q inference --loglevel=INFO;
+    celery -A app.celery worker -Q inference --loglevel=INFO -c 1;
 fi
 
 if [ "$CONTAINER_ROLE" = "server_worker" ];
 then
     echo "Role is: $CONTAINER_ROLE";
-    celery -A app.celery worker -Q server --loglevel=INFO;
+    celery -A app.celery worker -Q server --loglevel=INFO -c 1;
 fi
