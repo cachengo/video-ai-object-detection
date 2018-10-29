@@ -21,7 +21,9 @@ def import_model(model_name):
     model_file = model_name + '.tar.gz'
     download_base = 'http://download.tensorflow.org/models/object_detection/'
     path_to_graph = model_name + '/frozen_inference_graph.pb'
-    path_to_labels = os.path.join('/models/research/object_detection/data', 'mscoco_label_map.pbtxt')
+    path_to_labels = os.path.join('/models/research/object_detection/data',
+                                  'mscoco_label_map.pbtxt'
+                                 )
 
     if not os.path.isfile(path_to_graph):
         opener = urllib.request.URLopener()
@@ -41,7 +43,8 @@ def import_model(model_name):
             od_graph_def.ParseFromString(serialized_graph)
             tf.import_graph_def(od_graph_def, name='')
 
-    category_index = label_map_util.create_category_index_from_labelmap(path_to_labels, use_display_name=True)
+    category_index = label_map_util.create_category_index_from_labelmap(
+        path_to_labels, use_display_name=True)
     return graph, category_index
 
 
@@ -55,10 +58,9 @@ class ObjectDetector:
             ops = tf.get_default_graph().get_operations()
             all_tensor_names = {output.name for op in ops for output in op.outputs}
             tensor_dict = {}
-            for key in [
-                'num_detections', 'detection_boxes', 'detection_scores',
-                'detection_classes', 'detection_masks'
-            ]:
+            for key in ['num_detections', 'detection_boxes', 'detection_scores',
+                        'detection_classes', 'detection_masks'
+                       ]:
                 tensor_name = key + ':0'
                 if tensor_name in all_tensor_names:
                     tensor_dict[key] = tf.get_default_graph().get_tensor_by_name(
@@ -67,7 +69,8 @@ class ObjectDetector:
                 # The following processing is only for single image
                 detection_boxes = tf.squeeze(tensor_dict['detection_boxes'], [0])
                 detection_masks = tf.squeeze(tensor_dict['detection_masks'], [0])
-                # Reframe is required to translate mask from box coordinates to image coordinates and fit the image size.
+                # Reframe is required to translate mask from box coordinates to
+                # image coordinates and fit the image size.
                 real_num_detection = tf.cast(tensor_dict['num_detections'][0], tf.int32)
                 detection_boxes = tf.slice(detection_boxes, [0, 0], [real_num_detection, -1])
                 detection_masks = tf.slice(detection_masks, [0, 0, 0], [real_num_detection, -1, -1])
@@ -92,18 +95,26 @@ class ObjectDetector:
                     tensor_dict,
                     feed_dict={image_tensor: np.expand_dims(image, 0)}
                 )
+                output_dict['num_detections'] = int(output_dict['num_detections'][0])
+                output_dict['detection_classes'] = output_dict[
+                    'detection_classes'][0].astype(np.uint8)
+                output_dict['detection_boxes'] = output_dict['detection_boxes'][0]
+                output_dict['detection_scores'] = output_dict['detection_scores'][0]
+                if 'detection_masks' in output_dict:
+                    output_dict['detection_masks'] = output_dict['detection_masks'][0]
         return output_dict
 
-    def run_inference_for_video(self, video_path):
+    def run_inference_for_video(self, video_path, output_fn=None):
         tensor_dict = None
         videogen = skvideo.io.vreader(video_path)
 
-        for frame in videogen:
+        for frame_num, frame in enumerate(videogen):
             image_np = np.array(frame).astype('uint8')
             tensor_dict = tensor_dict or self.get_tensor_dict(image_np)
             output_dict = self.run_inference_for_single_image(
                 image_np,
                 tensor_dict=tensor_dict
             )
-
+            if output_fn:
+                output_fn(frame_num, output_dict)
         print('Finished video')

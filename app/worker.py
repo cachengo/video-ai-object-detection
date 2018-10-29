@@ -14,7 +14,7 @@ from object_detector import ObjectDetector
 
 asynpool.PROC_ALIVE_TIMEOUT = 100.0  # set this long enough
 
-logger = get_task_logger(__name__)
+LOGGER = get_task_logger(__name__)
 
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379')
@@ -24,43 +24,47 @@ INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2
 
 
 # Celery: Distributed Task Queue
-app = Celery('tasks', backend=CELERY_RESULT_BACKEND, broker=CELERY_BROKER_URL)
-app.conf.task_serializer = 'json'
-app.conf.result_serializer = 'json'
-app.conf.task_routes = {
+WORKER = Celery('tasks', backend=CELERY_RESULT_BACKEND, broker=CELERY_BROKER_URL)
+WORKER.conf.task_serializer = 'json'
+WORKER.conf.result_serializer = 'json'
+WORKER.conf.task_routes = {
     'split_video': {'queue': 'server'},
     'infer_from_video': {'queue': 'inference'}
 }
 
-detector = None
+DETECTOR = None
 
+
+def store_frame_metadata(video_name, frame_number, metadata, start_frame=0):
+    pass
 
 @worker_process_init.connect()
 def on_worker_init(**_):
-    global detector
-    detector = ObjectDetector(INFERENCE_MODEL)
-    logger.info('Worker initialized with model')
+    global DETECTOR
+    DETECTOR = ObjectDetector(INFERENCE_MODEL)
+    LOGGER.info('Worker initialized with model')
 
 
-@app.task(name='infer_from_video')
+@WORKER.task(name='infer_from_video')
 def infer_from_video(chunk_name, parent_name, chunk_start_frame):
-    logger.info('Started processing video')
+    LOGGER.info('Started processing video')
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     chunk_path = image_path.format(chunk_name)
     opener.retrieve(LEADER_NODE_URL + chunk_name, chunk_path)
-    response = detector.run_inference_for_video(chunk_path)
-    logger.info('Finished processing video')
-    return response
+    output_fn = lambda frame, meta: store_frame_metadata(
+        parent_name, frame, meta, chunk_start_frame)
+    DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn)
+    LOGGER.info('Finished processing video')
 
 
-@app.task(name='split_video')
+@WORKER.task(name='split_video')
 def split_video(video_url):
     filename = '{}.mp4'.format(hashlib.md5(video_url.encode()).hexdigest())
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     if not os.path.isfile(filename):
-        print('Retrieving video from: {}'.format(video_url))
+        LOGGER.info('Retrieving video from: {}'.format(video_url))
         opener.retrieve(video_url, image_path.format(filename))
 
     videogen = skvideo.io.vreader(image_path.format(filename))
