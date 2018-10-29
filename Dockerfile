@@ -13,7 +13,8 @@ RUN pip3 install -r requirements.txt \
 
 RUN mkdir /images && mkdir /celery && apt install -y ffmpeg
 
-COPY . /
+WORKDIR /object-detection
+COPY . ./
 
 ENV PYTHONPATH=/models/research:/models/research/slim
 

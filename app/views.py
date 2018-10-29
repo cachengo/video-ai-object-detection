@@ -1,8 +1,7 @@
-from flask import Flask, request, render_template, send_from_directory
+from flask import request, render_template, send_from_directory
 
-from worker import split_video
-
-app = Flask(__name__)
+from app import app
+from app.worker import split_video
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -20,7 +19,3 @@ def images(path):
     # send_static_file will guess the correct MIME type
     print(path)
     return send_from_directory('/images/', path)
-
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000, host='0.0.0.0')

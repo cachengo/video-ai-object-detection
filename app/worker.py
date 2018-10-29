@@ -4,34 +4,21 @@ import uuid
 
 import six.moves.urllib as urllib
 import skvideo.io
-from celery import Celery
 from celery.utils.log import get_task_logger
 from celery.signals import worker_init, worker_process_init
 from celery.concurrency import asynpool
 
-from object_detector import ObjectDetector
+from app import celery
+from app.object_detector import ObjectDetector
 
 
 asynpool.PROC_ALIVE_TIMEOUT = 100.0  # set this long enough
 
 LOGGER = get_task_logger(__name__)
 
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379')
 FRAMES_PER_CHUNK = os.environ.get('FRAMES_PER_CHUNK', 100)
 LEADER_NODE_URL = os.environ.get('LEADER_NODE_URL', 'http://localhost:5000/videos/')
 INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2018_05_09')
-
-
-# Celery: Distributed Task Queue
-WORKER = Celery('tasks', backend=CELERY_RESULT_BACKEND, broker=CELERY_BROKER_URL)
-WORKER.conf.task_serializer = 'json'
-WORKER.conf.result_serializer = 'json'
-WORKER.conf.task_routes = {
-    'split_video': {'queue': 'server'},
-    'infer_from_video': {'queue': 'inference'}
-}
-
 DETECTOR = None
 
 
@@ -45,7 +32,7 @@ def on_worker_init(**_):
     LOGGER.info('Worker initialized with model')
 
 
-@WORKER.task(name='infer_from_video')
+@celery.task(name='infer_from_video')
 def infer_from_video(chunk_name, parent_name, chunk_start_frame):
     LOGGER.info('Started processing video')
     image_path = '/images/{}'
@@ -58,7 +45,7 @@ def infer_from_video(chunk_name, parent_name, chunk_start_frame):
     LOGGER.info('Finished processing video')
 
 
-@WORKER.task(name='split_video')
+@celery.task(name='split_video')
 def split_video(video_url):
     filename = '{}.mp4'.format(hashlib.md5(video_url.encode()).hexdigest())
     image_path = '/images/{}'
