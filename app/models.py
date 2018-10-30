@@ -18,9 +18,9 @@ class Frame(db.Model):
 class Detection(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     frame_id = db.Column(db.Integer, db.ForeignKey('frame.id'))
-    ymin = db.Column(db.Float, index=False)
-    xmin = db.Column(db.Float, index=False)
-    ymax = db.Column(db.Float, index=False)
-    xmax = db.Column(db.Float, index=False)
+    y_min = db.Column(db.Float, index=False)
+    x_min = db.Column(db.Float, index=False)
+    y_max = db.Column(db.Float, index=False)
+    x_max = db.Column(db.Float, index=False)
     object_name = db.Column(db.String(32), index=False)
     score = db.Column(db.Float, index=False)

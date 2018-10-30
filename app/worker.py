@@ -2,6 +2,7 @@ import hashlib
 import os
 import uuid
 
+import numpy as np
 import six.moves.urllib as urllib
 import skvideo.io
 from celery.utils.log import get_task_logger
@@ -23,8 +24,29 @@ INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2
 DETECTOR = None
 
 
-def store_frame_metadata(video_name, frame_number, metadata, start_frame=0):
-    pass
+def store_frame_metadata(parent_id, frame_ix, metadata, start_ix=0):
+    frame = Frame(
+        position=(frame_ix + start_ix),
+        video_id=parent_id
+    )
+    db.session.add(frame)
+    for i in range(metadata['num_detections']):
+        box = metadata['detection_boxes'][i]
+        detection = Detection(
+            frame=frame,
+            y_min=np.asscalar(box[0]),
+            x_min=np.asscalar(box[1]),
+            y_max=np.asscalar(box[2]),
+            x_max=np.asscalar(box[3]),
+            object_name=DETECTOR.category_index.get(
+                metadata['detection_classes'][i],
+                dict()
+            ).get('name', 'Unknown'),
+            score=np.asscalar(metadata['detection_scores'][i])
+        )
+        db.session.add(detection)
+    db.session.commit()
+
 
 @worker_process_init.connect()
 def on_worker_init(**_):
@@ -34,14 +56,14 @@ def on_worker_init(**_):
 
 
 @celery.task(name='infer_from_video')
-def infer_from_video(chunk_name, parent_name, chunk_start_frame):
+def infer_from_video(chunk_name, parent_id, chunk_start_frame):
     LOGGER.info('Started processing video')
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     chunk_path = image_path.format(chunk_name)
     opener.retrieve(LEADER_NODE_URL + chunk_name, chunk_path)
     output_fn = lambda frame, meta: store_frame_metadata(
-        parent_name, frame, meta, chunk_start_frame)
+        parent_id, frame, meta, chunk_start_frame)
     DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn)
     LOGGER.info('Finished processing video')
 
@@ -64,10 +86,10 @@ def split_video(video_id):
     for i, frame in enumerate(videogen):
         if i % FRAMES_PER_CHUNK == 0 and i > 0:
             writer.close()
-            infer_from_video.delay(chunk_name, filename, chunk * FRAMES_PER_CHUNK)
+            infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
             chunk += 1
             chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
             writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
         writer.writeFrame(frame)
     writer.close()
-    infer_from_video.delay(chunk_name, filename, chunk * FRAMES_PER_CHUNK)
+    infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
