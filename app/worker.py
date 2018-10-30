@@ -8,8 +8,9 @@ from celery.utils.log import get_task_logger
 from celery.signals import worker_init, worker_process_init
 from celery.concurrency import asynpool
 
-from app import celery
+from app import celery, db
 from app.object_detector import ObjectDetector
+from app.models import Video, Frame, Detection
 
 
 asynpool.PROC_ALIVE_TIMEOUT = 100.0  # set this long enough
@@ -46,13 +47,14 @@ def infer_from_video(chunk_name, parent_name, chunk_start_frame):
 
 
 @celery.task(name='split_video')
-def split_video(video_url):
-    filename = '{}.mp4'.format(hashlib.md5(video_url.encode()).hexdigest())
+def split_video(video_id):
+    video = Video.query.get(video_id)
+    filename = '{}.mp4'.format(hashlib.md5(video.url.encode()).hexdigest())
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     if not os.path.isfile(filename):
-        LOGGER.info('Retrieving video from: {}'.format(video_url))
-        opener.retrieve(video_url, image_path.format(filename))
+        LOGGER.info('Retrieving video from: {}'.format(video.url))
+        opener.retrieve(video.url, image_path.format(filename))
 
     videogen = skvideo.io.vreader(image_path.format(filename))
 
@@ -68,3 +70,4 @@ def split_video(video_url):
             writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
         writer.writeFrame(frame)
     writer.close()
+    infer_from_video.delay(chunk_name, filename, chunk * FRAMES_PER_CHUNK)

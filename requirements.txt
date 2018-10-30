@@ -5,6 +5,7 @@ flask
 flask-migrate
 flask-sqlalchemy
 gunicorn
+psycopg2
 redis
 sk-video
 tensorflow
