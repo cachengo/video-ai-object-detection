@@ -11,7 +11,7 @@ from celery.concurrency import asynpool
 
 from app import celery, db
 from app.object_detector import ObjectDetector
-from app.models import Video, Frame, Detection
+from app.models import Video, Frame, Detection, Job
 
 
 asynpool.PROC_ALIVE_TIMEOUT = 100.0  # set this long enough
@@ -55,8 +55,8 @@ def on_worker_init(**_):
     LOGGER.info('Worker initialized with model')
 
 
-@celery.task(name='infer_from_video')
-def infer_from_video(chunk_name, parent_id, chunk_start_frame):
+@celery.task(name='infer_from_video', bind=True)
+def infer_from_video(self, chunk_name, parent_id, chunk_start_frame):
     LOGGER.info('Started processing video')
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
@@ -64,12 +64,24 @@ def infer_from_video(chunk_name, parent_id, chunk_start_frame):
     opener.retrieve(LEADER_NODE_URL + chunk_name, chunk_path)
     output_fn = lambda frame, meta: store_frame_metadata(
         parent_id, frame, meta, chunk_start_frame)
-    DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn)
+    DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn, job=self)
     LOGGER.info('Finished processing video')
 
 
-@celery.task(name='split_video')
-def split_video(video_id):
+def submit_inference_job(chunk_name, parent_id, start_ix):
+    task = infer_from_video.delay(chunk_name, parent_id, start_ix)
+    job = Job(
+        desc='Infer',
+        celery_id=task.id,
+        video_id=parent_id
+    )
+    db.session.add(job)
+    db.session.commit()
+
+
+@celery.task(name='split_video', bind=True)
+def split_video(self, video_id):
+    self.update_state(state='DOWNLOADING')
     video = Video.query.get(video_id)
     filename = '{}.mp4'.format(hashlib.md5(video.url.encode()).hexdigest())
     image_path = '/images/{}'
@@ -78,18 +90,26 @@ def split_video(video_id):
         LOGGER.info('Retrieving video from: {}'.format(video.url))
         opener.retrieve(video.url, image_path.format(filename))
 
-    videogen = skvideo.io.vreader(image_path.format(filename))
-
+    videogen = skvideo.io.FFmpegReader(image_path.format(filename))
+    (video_length, _, _, _) = videogen.getShape()
     chunk = 0
     chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
     writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
-    for i, frame in enumerate(videogen):
+    i = -1
+    for frame in videogen.nextFrame():
+        i += 1
         if i % FRAMES_PER_CHUNK == 0 and i > 0:
             writer.close()
-            infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
+            submit_inference_job(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
+            self.update_state(state='PROGRESS',
+                              meta={'current': i, 'total': video_length}
+                             )
             chunk += 1
             chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
             writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
         writer.writeFrame(frame)
     writer.close()
-    infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
+    submit_inference_job(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
+    self.update_state(state='PROGRESS',
+                      meta={'current': video_length, 'total': video_length}
+                     )

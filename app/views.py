@@ -2,7 +2,7 @@ from flask import request, render_template, send_from_directory
 
 from app import app, db
 from app.worker import split_video
-from app.models import Video
+from app.models import Job, Video
 
 
 
@@ -30,10 +30,14 @@ def initiate_video():
             raise InvalidUsage('Data must contain video_name and video_url')
         video = Video(name=data['video_name'], url=data['video_url'])
         db.session.add(video)
-        db.session.flush()
+        db.session.commit()
         task = split_video.delay(video.id)
-        video.ingest_job = task.id
-        db.session.add(video)
+        job = Job(
+            desc='Download and Split',
+            celery_id=task.id,
+            video=video
+        )
+        db.session.add(job)
         db.session.commit()
         return 'Video submitted'
     return render_template('submit_job.html', title='Video Analysis')
