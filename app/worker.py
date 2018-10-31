@@ -2,66 +2,81 @@ import hashlib
 import os
 import uuid
 
+import numpy as np
 import six.moves.urllib as urllib
 import skvideo.io
-from celery import Celery
 from celery.utils.log import get_task_logger
 from celery.signals import worker_init, worker_process_init
 from celery.concurrency import asynpool
 
-from object_detector import ObjectDetector
+from app import celery, db
+from app.object_detector import ObjectDetector
+from app.models import Video, Frame, Detection
 
 
 asynpool.PROC_ALIVE_TIMEOUT = 100.0  # set this long enough
 
-logger = get_task_logger(__name__)
+LOGGER = get_task_logger(__name__)
 
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379')
 FRAMES_PER_CHUNK = os.environ.get('FRAMES_PER_CHUNK', 100)
 LEADER_NODE_URL = os.environ.get('LEADER_NODE_URL', 'http://localhost:5000/videos/')
 INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2018_05_09')
+DETECTOR = None
 
 
-# Celery: Distributed Task Queue
-app = Celery('tasks', backend=CELERY_RESULT_BACKEND, broker=CELERY_BROKER_URL)
-app.conf.task_serializer = 'json'
-app.conf.result_serializer = 'json'
-app.conf.task_routes = {
-    'split_video': {'queue': 'server'},
-    'infer_from_video': {'queue': 'inference'}
-}
-
-detector = None
+def store_frame_metadata(parent_id, frame_ix, metadata, start_ix=0):
+    frame = Frame(
+        position=(frame_ix + start_ix),
+        video_id=parent_id
+    )
+    db.session.add(frame)
+    for i in range(metadata['num_detections']):
+        box = metadata['detection_boxes'][i]
+        detection = Detection(
+            frame=frame,
+            y_min=np.asscalar(box[0]),
+            x_min=np.asscalar(box[1]),
+            y_max=np.asscalar(box[2]),
+            x_max=np.asscalar(box[3]),
+            object_name=DETECTOR.category_index.get(
+                metadata['detection_classes'][i],
+                dict()
+            ).get('name', 'Unknown'),
+            score=np.asscalar(metadata['detection_scores'][i])
+        )
+        db.session.add(detection)
+    db.session.commit()
 
 
 @worker_process_init.connect()
 def on_worker_init(**_):
-    global detector
-    detector = ObjectDetector(INFERENCE_MODEL)
-    logger.info('Worker initialized with model')
+    global DETECTOR
+    DETECTOR = ObjectDetector(INFERENCE_MODEL)
+    LOGGER.info('Worker initialized with model')
 
 
-@app.task(name='infer_from_video')
-def infer_from_video(chunk_name, parent_name, chunk_start_frame):
-    logger.info('Started processing video')
+@celery.task(name='infer_from_video')
+def infer_from_video(chunk_name, parent_id, chunk_start_frame):
+    LOGGER.info('Started processing video')
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     chunk_path = image_path.format(chunk_name)
     opener.retrieve(LEADER_NODE_URL + chunk_name, chunk_path)
-    response = detector.run_inference_for_video(chunk_path)
-    logger.info('Finished processing video')
-    return response
+    output_fn = lambda frame, meta: store_frame_metadata(
+        parent_id, frame, meta, chunk_start_frame)
+    DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn)
+    LOGGER.info('Finished processing video')
 
 
-@app.task(name='split_video')
-def split_video(video_url):
-    filename = '{}.mp4'.format(hashlib.md5(video_url.encode()).hexdigest())
+@celery.task(name='split_video')
+def split_video(video_id):
+    video = Video.query.get(video_id)
+    filename = '{}.mp4'.format(hashlib.md5(video.url.encode()).hexdigest())
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     if not os.path.isfile(filename):
-        print('Retrieving video from: {}'.format(video_url))
-        opener.retrieve(video_url, image_path.format(filename))
+        LOGGER.info('Retrieving video from: {}'.format(video.url))
+        opener.retrieve(video.url, image_path.format(filename))
 
     videogen = skvideo.io.vreader(image_path.format(filename))
 
@@ -71,9 +86,10 @@ def split_video(video_url):
     for i, frame in enumerate(videogen):
         if i % FRAMES_PER_CHUNK == 0 and i > 0:
             writer.close()
-            infer_from_video.delay(chunk_name, filename, chunk * FRAMES_PER_CHUNK)
+            infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
             chunk += 1
             chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
             writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
         writer.writeFrame(frame)
     writer.close()
+    infer_from_video.delay(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)

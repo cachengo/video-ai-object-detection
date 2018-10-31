@@ -23,12 +23,20 @@ then
 
   docker stop redis;
   docker rm redis;
-
   docker run -d \
     --name redis \
     --net=video-ai \
     -p 6379:6379 \
     redis:alpine;
+
+  docker stop postgres;
+  docker rm postgres;
+  docker run -d \
+    --name postgres \
+    --net video-ai \
+    -p 5432:5432 \
+    -e POSTGRES_PASSWORD=password \
+    postgres
 fi
 
 export IMAGE_TAG=$(cat VERSION);
@@ -50,6 +58,7 @@ docker run -d \
   -e CELERY_BROKER_URL=redis://redis:6379 \
   -e CELERY_RESULT_BACKEND=redis://redis:6379 \
   -e CONTAINER_ROLE=server \
+  -e DATABASE_URL='postgresql://postgres:password@postgres:5432/postgres' \
   -v /images:/images \
   --net=video-ai \
   --name detection_main \
@@ -64,6 +73,7 @@ docker run -d \
   -e CONTAINER_ROLE=inference \
   -e LEADER_NODE_URL=http://detection_main:5000/videos/ \
   -e INFERENCE_MODEL=ssdlite_mobilenet_v2_coco_2018_05_09 \
+  -e DATABASE_URL='postgresql://postgres:password@postgres:5432/postgres' \
   --name inference_worker \
   --net=video-ai \
   --dns=8.8.8.8 \
@@ -77,6 +87,7 @@ docker run -d \
   -e CELERY_BROKER_URL=redis://redis:6379 \
   -e CELERY_RESULT_BACKEND=redis://redis:6379 \
   -e CONTAINER_ROLE=server_worker \
+  -e DATABASE_URL='postgresql://postgres:password@postgres:5432/postgres' \
   -v /images:/images \
   --net=video-ai \
   --name server_worker \
