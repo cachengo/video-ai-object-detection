@@ -1,8 +1,8 @@
-from flask import request, render_template, send_from_directory
+from flask import request, render_template, send_from_directory, redirect, url_for
 
 from app import app, db
-from app.worker import split_video
-from app.models import Video
+from app.worker import split_video, get_status, SPLIT_JOB_DESC
+from app.models import Job, Video
 
 
 
@@ -30,13 +30,24 @@ def initiate_video():
             raise InvalidUsage('Data must contain video_name and video_url')
         video = Video(name=data['video_name'], url=data['video_url'])
         db.session.add(video)
-        db.session.flush()
-        task = split_video.delay(video.id)
-        video.ingest_job = task.id
-        db.session.add(video)
         db.session.commit()
-        return 'Video submitted'
-    return render_template('submit_job.html', title='Video Analysis')
+        task = split_video.delay(video.id)
+        job = Job(
+            desc=SPLIT_JOB_DESC,
+            celery_id=task.id,
+            video=video
+        )
+        db.session.add(job)
+        db.session.commit()
+        return redirect(url_for('jobs', video_id=video.id))
+    return render_template('submit_job.html')
+
+
+@app.route('/progress/<video_id>')
+def jobs(video_id):
+    video = Video.query.get(video_id)
+    jobs = [(job.desc, get_status(job)) for job in video.jobs]
+    return render_template('video_progress.html', video=video, jobs=jobs)
 
 
 @app.route('/videos/<path>')

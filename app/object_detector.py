@@ -104,11 +104,14 @@ class ObjectDetector:
                     output_dict['detection_masks'] = output_dict['detection_masks'][0]
         return output_dict
 
-    def run_inference_for_video(self, video_path, output_fn=None):
+    def run_inference_for_video(self, video_path, output_fn=None, job=None):
         tensor_dict = None
-        videogen = skvideo.io.vreader(video_path)
+        videogen = skvideo.io.FFmpegReader(video_path)
+        (video_length, _, _, _) = videogen.getShape()
 
-        for frame_num, frame in enumerate(videogen):
+        frame_num = -1
+        for frame in videogen.nextFrame():
+            frame_num += 1
             image_np = np.array(frame).astype('uint8')
             tensor_dict = tensor_dict or self.get_tensor_dict(image_np)
             output_dict = self.run_inference_for_single_image(
@@ -117,4 +120,8 @@ class ObjectDetector:
             )
             if output_fn:
                 output_fn(frame_num, output_dict)
+            if job:
+                job.update_state(state='PROGRESS',
+                                 meta={'current': frame_num, 'total': video_length}
+                                )
         print('Finished video')
