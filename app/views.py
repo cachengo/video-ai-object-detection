@@ -1,7 +1,7 @@
-from flask import request, render_template, send_from_directory
+from flask import request, render_template, send_from_directory, redirect, url_for
 
 from app import app, db
-from app.worker import split_video
+from app.worker import split_video, get_status, SPLIT_JOB_DESC
 from app.models import Job, Video
 
 
@@ -33,14 +33,21 @@ def initiate_video():
         db.session.commit()
         task = split_video.delay(video.id)
         job = Job(
-            desc='Download and Split',
+            desc=SPLIT_JOB_DESC,
             celery_id=task.id,
             video=video
         )
         db.session.add(job)
         db.session.commit()
-        return 'Video submitted'
-    return render_template('submit_job.html', title='Video Analysis')
+        return redirect(url_for('jobs', video_id=video.id))
+    return render_template('submit_job.html')
+
+
+@app.route('/progress/<video_id>')
+def jobs(video_id):
+    video = Video.query.get(video_id)
+    jobs = [(job.desc, get_status(job)) for job in video.jobs]
+    return render_template('video_progress.html', video=video, jobs=jobs)
 
 
 @app.route('/videos/<path>')

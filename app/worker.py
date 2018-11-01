@@ -22,6 +22,8 @@ FRAMES_PER_CHUNK = os.environ.get('FRAMES_PER_CHUNK', 100)
 LEADER_NODE_URL = os.environ.get('LEADER_NODE_URL', 'http://localhost:5000/videos/')
 INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2018_05_09')
 DETECTOR = None
+INFERENCE_JOB_DESC = 'Infer'
+SPLIT_JOB_DESC = 'Download and Split'
 
 
 def store_frame_metadata(parent_id, frame_ix, metadata, start_ix=0):
@@ -71,7 +73,7 @@ def infer_from_video(self, chunk_name, parent_id, chunk_start_frame):
 def submit_inference_job(chunk_name, parent_id, start_ix):
     task = infer_from_video.delay(chunk_name, parent_id, start_ix)
     job = Job(
-        desc='Infer',
+        desc=INFERENCE_JOB_DESC,
         celery_id=task.id,
         video_id=parent_id
     )
@@ -113,3 +115,10 @@ def split_video(self, video_id):
     self.update_state(state='PROGRESS',
                       meta={'current': video_length, 'total': video_length}
                      )
+
+
+def get_status(job):
+    if job.desc == SPLIT_JOB_DESC:
+        return split_video.AsyncResult(job.celery_id)
+    if job.desc == INFERENCE_JOB_DESC:
+        return split_video.AsyncResult(job.celery_id)
