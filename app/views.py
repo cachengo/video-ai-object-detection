@@ -1,8 +1,9 @@
-from flask import request, render_template, send_from_directory, redirect, url_for
+from flask import request, render_template, send_from_directory, redirect, \
+    url_for, jsonify
 
 from app import app, db
 from app.worker import split_video, get_status, SPLIT_JOB_DESC
-from app.models import Job, Video
+from app.models import Job, Video, Frame
 
 
 
@@ -41,6 +42,32 @@ def initiate_video():
         db.session.commit()
         return redirect(url_for('jobs', video_id=video.id))
     return render_template('submit_job.html')
+
+
+@app.route('/all_videos')
+def all_videos():
+    videos = Video.query.all()
+    return render_template('all_videos.html', videos=videos)
+
+
+@app.route('/results/<video_id>')
+def results(video_id):
+    video = Video.query.get(video_id)
+    return render_template('results.html', video=video)
+
+
+@app.route('/detections/<video_id>/<frame_ix>')
+def detections(video_id, frame_ix):
+    frame = Frame.query.filter_by(video_id=video_id, position=frame_ix).one()
+    result = [{
+        'y_min': detection.y_min,
+        'x_min': detection.x_min,
+        'y_max': detection.y_max,
+        'x_max': detection.x_max,
+        'object_name': detection.object_name,
+        'score': detection.score
+    } for detection in frame.detections]
+    return jsonify(result)
 
 
 @app.route('/progress/<video_id>')
