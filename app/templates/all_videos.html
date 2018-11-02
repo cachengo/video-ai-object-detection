@@ -14,15 +14,22 @@
       </a>
     </nav>
     <div class="app container">
-      <form action="/" method="post">
-        <div class="form-group row">
-          <label for="video_name">Video Name</label>
-          <input type="text" class="form-control" id="video_name" placeholder="Enter video name" name="video_name">
-          <label for="video_url">Video Url</label>
-          <input type="text" class="form-control" id="video_url" placeholder="Enter video url" name="video_url">
-        </div>
-        <button id="submit-url" class="btn btn-dark btn-lg" type="submit">Submit</button>
-      </form>
+      <ul class="list-group">
+        <h3>Videos</h3>
+        {% for video in videos %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div class="row container">
+              <span class="col-xs-4">{{ video.name}} </span>
+              <span class="col-xs-4">
+                <a href="{{ url_for('jobs', video_id=video.id) }}">Progress</a>
+              </span>
+              <span class="col-xs-4">
+                <a href="{{ url_for('results', video_id=video.id) }}">Results</a>
+              </span>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
     </div>
     <script src="{{ url_for('static', filename='js/ext/jquery-3.3.1.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ext/bootstrap.min.js') }}"></script>
