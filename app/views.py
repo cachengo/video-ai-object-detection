@@ -23,7 +23,7 @@ class InvalidUsage(Exception):
         return result
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/start_job', methods=['GET', 'POST'])
 def initiate_video():
     if request.method == 'POST':
         data = request.form
@@ -44,6 +44,7 @@ def initiate_video():
     return render_template('submit_job.html')
 
 
+@app.route('/', methods=['GET', 'POST'])
 @app.route('/all_videos')
 def all_videos():
     videos = Video.query.all()
