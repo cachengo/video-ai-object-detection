@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <form action="/" method="post">
+  <form action="{{ url_for('initiate_video')}}" method="post">
     <div class="form-group row">
       <label for="video_name">Video Name</label>
       <input type="text" class="form-control" id="video_name" placeholder="Enter video name" name="video_name">
