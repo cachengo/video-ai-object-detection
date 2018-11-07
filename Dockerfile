@@ -4,9 +4,9 @@ COPY requirements.txt /requirements.txt
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN pip3 install -r requirements.txt \
-    && apt update \
-    && apt install -y python-pil python-lxml python-tk git \
+RUN apt update \
+    && apt install -y python-pil python-lxml python-tk git libpq-dev \
+    && pip3 install -r requirements.txt \
     && git clone https://github.com/tensorflow/models.git \
     && cd models/research/ \
     && protoc object_detection/protos/*.proto --python_out=. \
