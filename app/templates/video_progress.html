@@ -1,48 +1,33 @@
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Video Analysis</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ext/bootstrap.min.css') }}">
-  </head>
-
-  <body>
-    <nav class="navbar navbar-light bg-light justify-content-between">
-      <a class="navbar-brand" href="#">
-        <img src="{{ url_for('static', filename='img/cachengo_logo.png') }}" height="30" width="119" alt="">
-      </a>
-    </nav>
-    <div class="app container">
-      <ul class="list-group">
-        <h3>{{ video.name }}</h3>
-        {% for job in jobs %}
-          <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div class="row container">
-              <span class="col-xs-4">{{ job[0] }}</span>
-              <div class="progress">
-                {% if job[1].state == 'PROGRESS' %}
-                {% set prc = 100*job[1].info.get('current', 0)/job[1].info.get('total', 1) %}
-                <div
-                  class="progress-bar progress-bar-striped"
-                  role="progressbar"
-                  aria-valuenow="{{ prc|int }}"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  style="width:{{ prc|int }}%"
-                >
-                  {{ prc|int }}%
-                </div>
-                {% else %}
-                {{ job[1].status }}
-                {% endif %}
-              </div>
+{% extends "base.html" %}
+{% block metas %}
+  <meta http-equiv="refresh" content="5" >
+{% endblock %}
+{% block content %}
+  <ul class="list-group">
+    <h3>{{ video.name }}</h3>
+    {% for job in jobs %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div class="row container">
+          <span class="col-xs-4">{{ job[0] }}</span>
+          <div class="progress">
+            {% if job[1].state == 'PROGRESS' %}
+            {% set prc = 100*job[1].info.get('current', 0)/job[1].info.get('total', 1) %}
+            <div
+              class="progress-bar progress-bar-striped"
+              role="progressbar"
+              aria-valuenow="{{ prc|int }}"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              style="width:{{ prc|int }}%"
+            >
+              {{ prc|int }}%
             </div>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-    <script src="{{ url_for('static', filename='js/ext/jquery-3.3.1.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ext/bootstrap.min.js') }}"></script>
-    </body>
-</html>
+            {% else %}
+            {{ job[1].status }}
+            {% endif %}
+          </div>
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

@@ -44,7 +44,7 @@ def initiate_video():
     return render_template('submit_job.html')
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 @app.route('/all_videos')
 def all_videos():
     videos = Video.query.all()
