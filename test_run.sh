@@ -54,7 +54,7 @@ docker rm detection_main;
 docker stop detection_main;
 docker rm detection_main;
 docker run -d \
-  -p 5000:5000 \
+  -p 5001:5000 \
   -e CELERY_BROKER_URL=redis://redis:6379 \
   -e CELERY_RESULT_BACKEND=redis://redis:6379 \
   -e CONTAINER_ROLE=server \
