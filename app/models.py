@@ -30,5 +30,7 @@ class Detection(db.Model):
 class Job(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     desc = db.Column(db.String(32))
-    celery_id = db.Column(db.String(48))
+    celery_id = db.Column(db.String(48), index=True)
     video_id = db.Column(db.Integer, db.ForeignKey('video.id'), index=True)
+    average_inference_time = db.Column(db.Float, index=False)
+    total_job_time = db.Column(db.Float, index=False)
