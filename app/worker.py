@@ -1,4 +1,5 @@
 import hashlib
+import time
 import os
 import uuid
 
@@ -59,7 +60,7 @@ def on_worker_init(**_):
 
 @celery.task(name='infer_from_video', bind=True)
 def infer_from_video(self, chunk_name, parent_id, chunk_start_frame):
-    LOGGER.info('Started processing video')
+    start_time = time.time()
     image_path = '/images/{}'
     opener = urllib.request.URLopener()
     chunk_path = image_path.format(chunk_name)
@@ -67,6 +68,13 @@ def infer_from_video(self, chunk_name, parent_id, chunk_start_frame):
     output_fn = lambda frame, meta: store_frame_metadata(
         parent_id, frame, meta, chunk_start_frame)
     DETECTOR.run_inference_for_video(chunk_path, output_fn=output_fn, job=self)
+    job = Job.query.filter_by(celery_id=self.request.id).one()
+    job.average_inference_time = (
+        self.AsyncResult(self.request.id).info.get('avg_inference_time', 0)
+    )
+    job.total_job_time = time.time() - start_time
+    db.session.add(job)
+    db.session.commit()
     LOGGER.info('Finished processing video')
 
 

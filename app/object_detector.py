@@ -1,6 +1,6 @@
 import os
 import tarfile
-from distutils.version import StrictVersion
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -104,20 +104,27 @@ class ObjectDetector:
         tensor_dict = None
         videogen = skvideo.io.FFmpegReader(video_path)
         (video_length, _, _, _) = videogen.getShape()
+        total_inference_time = 0
 
         frame_num = -1
         for frame in videogen.nextFrame():
             frame_num += 1
             image_np = np.array(frame).astype('uint8')
             tensor_dict = tensor_dict or self.get_tensor_dict(image_np)
+            t_start_inference = time.time()
             output_dict = self.run_inference_for_single_image(
                 image_np,
                 tensor_dict=tensor_dict
             )
+            total_inference_time += time.time() - t_start_inference
             if output_fn:
                 output_fn(frame_num, output_dict)
             if job:
                 job.update_state(state='PROGRESS',
-                                 meta={'current': frame_num, 'total': video_length}
+                                 meta={
+                                     'current': frame_num,
+                                     'total': video_length,
+                                     'avg_inference_time': total_inference_time/(frame_num+1)
+                                 }
                                 )
         print('Finished video')
