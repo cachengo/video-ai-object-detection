@@ -5,7 +5,7 @@ COPY requirements.txt /requirements.txt
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update \
-    && apt install -y python-pil python-lxml python-tk git libpq-dev \
+    && apt install -y python-pil python-lxml python-tk git libpq-dev libfreetype6-dev pkg-config\
     && pip3 install -r requirements.txt \
     && git clone https://github.com/tensorflow/models.git \
     && cd models/research/ \

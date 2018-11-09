@@ -11,7 +11,6 @@ from celery.signals import worker_init, worker_process_init
 from celery.concurrency import asynpool
 
 from app import celery, db
-from app.object_detector import ObjectDetector
 from app.models import Video, Frame, Detection, Job
 
 
@@ -21,7 +20,6 @@ LOGGER = get_task_logger(__name__)
 
 FRAMES_PER_CHUNK = os.environ.get('FRAMES_PER_CHUNK', 100)
 LEADER_NODE_URL = os.environ.get('LEADER_NODE_URL', 'http://localhost:5000/videos/')
-INFERENCE_MODEL = os.environ.get('INFERENCE_MODEL', 'ssdlite_mobilenet_v2_coco_2018_05_09')
 DETECTOR = None
 INFERENCE_JOB_DESC = 'Infer'
 SPLIT_JOB_DESC = 'Download and Split'
@@ -54,7 +52,10 @@ def store_frame_metadata(parent_id, frame_ix, metadata, start_ix=0):
 @worker_process_init.connect()
 def on_worker_init(**_):
     global DETECTOR
-    DETECTOR = ObjectDetector(INFERENCE_MODEL)
+    if os.environ.get('CONTAINER_ROLE', '') ==  'inference':
+        # This import takes some time and we should avoid it unless necessary
+        from app.lite_object_detector import ObjectDetector
+        DETECTOR = ObjectDetector()
     LOGGER.info('Worker initialized with model')
 
 
