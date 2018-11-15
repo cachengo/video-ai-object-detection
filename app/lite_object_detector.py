@@ -1,11 +1,10 @@
 import os
 import time
 
+import cv2
 import numpy as np
 import tensorflow.contrib.lite
 import skvideo.io
-from skimage.transform import resize
-
 
 from object_detection.utils import ops as utils_ops
 from object_detection.utils import label_map_util
@@ -25,6 +24,28 @@ def import_model():
     return interpreter, category_index
 
 
+def resize_image(im, desired_size):
+    old_size = im.shape[:2] # old_size is in (height, width) format
+    ratio = float(desired_size)/max(old_size)
+    new_size = tuple([int(x*ratio) for x in old_size])
+
+    # new_size should be in (width, height) format
+    im = cv2.resize(im, (new_size[1], new_size[0]))
+
+    delta_w = desired_size - new_size[1]
+    delta_h = desired_size - new_size[0]
+    top, bottom = delta_h//2, delta_h-(delta_h//2)
+    left, right = delta_w//2, delta_w-(delta_w//2)
+
+    color = [0, 0, 0]
+    new_im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+    return new_im, (delta_w/desired_size, delta_h/desired_size)
+
+
+def adjust_position(position, border_size):
+    return min(max((position - border_size/2)/(1 - border_size), 0), 1)
+
+
 class ObjectDetector:
 
     def __init__(self):
@@ -34,14 +55,24 @@ class ObjectDetector:
         graph = self.graph
         input_details = graph.get_input_details()
         output_details = graph.get_output_details()
+
+        input_data, border_sizes = resize_image(image, 300)
         # TODO: Not all models take in float32. Quantized likes uint8
-        input_data = resize(image, [300, 300], anti_aliasing=True).astype('float32')
-        graph.set_tensor(input_details[0]['index'], [input_data.copy()])
+        graph.set_tensor(input_details[0]['index'], [input_data.astype('float32')])
         graph.invoke()
+
+        boxes = graph.get_tensor(output_details[0]['index'])[0]
+        boxes = [
+            [adjust_position(box[0], border_sizes[1]),
+             adjust_position(box[1], border_sizes[0]),
+             adjust_position(box[2], border_sizes[1]),
+             adjust_position(box[3], border_sizes[0])
+            ] for box in boxes
+        ]
 
         #After moving to TFLite, class predictions become off-by-one
         output_dict = {
-            'detection_boxes': graph.get_tensor(output_details[0]['index'])[0],
+            'detection_boxes': np.array(boxes),
             'detection_classes': 1 + graph.get_tensor(output_details[1]['index'])[0].astype(np.uint8),
             'detection_scores':graph.get_tensor(output_details[2]['index'])[0],
             'num_detections': int(graph.get_tensor(output_details[3]['index'])[0])
