@@ -3,6 +3,7 @@ import time
 import os
 import uuid
 
+import cv2
 import numpy as np
 import six.moves.urllib as urllib
 import skvideo.io
@@ -90,6 +91,15 @@ def submit_inference_job(chunk_name, parent_id, start_ix):
     db.session.commit()
 
 
+def resize_image(im, desired_size):
+    old_size = im.shape[:2] # old_size is in (height, width) format
+    ratio = float(desired_size)/max(old_size)
+    new_size = tuple([int(x*ratio) for x in old_size])
+
+    return cv2.resize(im, (new_size[1], new_size[0]))
+
+
+
 @celery.task(name='split_video', bind=True)
 def split_video(self, video_id):
     self.update_state(state='DOWNLOADING')
@@ -101,25 +111,47 @@ def split_video(self, video_id):
         LOGGER.info('Retrieving video from: {}'.format(video.url))
         opener.retrieve(video.url, image_path.format(filename))
 
-    videogen = skvideo.io.FFmpegReader(image_path.format(filename))
-    (video_length, _, _, _) = videogen.getShape()
+    cap = cv2.VideoCapture(image_path.format(filename))
+    if not cap.isOpened():
+        raise "Error opening video stream or file"
+    video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Shrink resolution before chunking to speed up encoding time
+    adjust_ratio = 300/max(frame_width, frame_height)
+    new_width = int(frame_width * adjust_ratio)
+    new_height = int(frame_height * adjust_ratio)
+
     chunk = 0
     chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
-    writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
+    writer = cv2.VideoWriter(image_path.format(chunk_name),
+                             cv2.VideoWriter_fourcc(*'MP4V'),
+                             10,
+                             (new_width, new_height)
+                            )
     i = -1
-    for frame in videogen.nextFrame():
-        i += 1
-        if i % FRAMES_PER_CHUNK == 0 and i > 0:
-            writer.close()
-            submit_inference_job(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
-            self.update_state(state='PROGRESS',
-                              meta={'current': i, 'total': video_length}
-                             )
-            chunk += 1
-            chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
-            writer = skvideo.io.FFmpegWriter(image_path.format(chunk_name))
-        writer.writeFrame(frame)
-    writer.close()
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if ret:
+            i += 1
+            if i % FRAMES_PER_CHUNK == 0 and i > 0:
+                writer.release()
+                submit_inference_job(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
+                self.update_state(state='PROGRESS',
+                                  meta={'current': i, 'total': video_length}
+                                 )
+                chunk += 1
+                chunk_name = '{}.mp4'.format(str(uuid.uuid4()))
+                writer = cv2.VideoWriter(image_path.format(chunk_name),
+                                         cv2.VideoWriter_fourcc(*'MP4V'),
+                                         10,
+                                         (new_width, new_height)
+                                        )
+            writer.write(cv2.resize(frame, (new_width, new_height)))
+        else:
+            break
+    writer.release()
+    cap.release()
     submit_inference_job(chunk_name, video_id, chunk * FRAMES_PER_CHUNK)
     self.update_state(state='PROGRESS',
                       meta={'current': video_length, 'total': video_length}
