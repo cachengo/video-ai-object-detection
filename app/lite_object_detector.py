@@ -4,7 +4,6 @@ import time
 import cv2
 import numpy as np
 import tensorflow.contrib.lite
-import skvideo.io
 
 from object_detection.utils import ops as utils_ops
 from object_detection.utils import label_map_util
@@ -24,8 +23,14 @@ def import_model():
     return interpreter, category_index
 
 
-def resize_image(im, desired_size):
+def resize_image(im, desired_size, stretch=False):
     old_size = im.shape[:2] # old_size is in (height, width) format
+    if old_size[0] == desired_size and old_size[1] == desired_size:
+        return im, (0, 0)
+
+    if stretch:
+        return cv2.resize(im, (desired_size, desired_size)), (1, 1)
+
     ratio = float(desired_size)/max(old_size)
     new_size = tuple([int(x*ratio) for x in old_size])
 
@@ -58,7 +63,7 @@ class ObjectDetector:
 
         input_data, border_sizes = resize_image(image, 300)
         # TODO: Not all models take in float32. Quantized likes uint8
-        graph.set_tensor(input_details[0]['index'], [input_data.astype('float32')])
+        graph.set_tensor(input_details[0]['index'], [(input_data/255).astype('float32')])
         graph.invoke()
 
         boxes = graph.get_tensor(output_details[0]['index'])[0]
@@ -81,25 +86,30 @@ class ObjectDetector:
         return output_dict
 
     def run_inference_for_video(self, video_path, output_fn=None, job=None):
-        videogen = skvideo.io.FFmpegReader(video_path)
-        (video_length, _, _, _) = videogen.getShape()
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise "Error opening video stream or file"
+        video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         total_inference_time = 0
 
         frame_num = -1
-        for frame in videogen.nextFrame():
-            frame_num += 1
-            image_np = np.array(frame).astype('uint8')
-            t_start_inference = time.time()
-            output_dict = self.run_inference_for_single_image(image_np)
-            total_inference_time += time.time() - t_start_inference
-            if output_fn:
-                output_fn(frame_num, output_dict)
-            if job:
-                job.update_state(state='PROGRESS',
-                                 meta={
-                                     'current': frame_num,
-                                     'total': video_length,
-                                     'avg_inference_time': total_inference_time/(frame_num+1)
-                                 }
-                                )
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if ret:
+                frame_num += 1
+                t_start_inference = time.time()
+                output_dict = self.run_inference_for_single_image(frame)
+                total_inference_time += time.time() - t_start_inference
+                if output_fn:
+                    output_fn(frame_num, output_dict)
+                if job:
+                    job.update_state(state='PROGRESS',
+                                     meta={
+                                         'current': frame_num,
+                                         'total': video_length,
+                                         'avg_inference_time': total_inference_time/(frame_num+1)
+                                     }
+                                    )
+            else:
+                break
         print('Finished video')

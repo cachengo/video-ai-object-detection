@@ -6,9 +6,8 @@ import uuid
 import cv2
 import numpy as np
 import six.moves.urllib as urllib
-import skvideo.io
 from celery.utils.log import get_task_logger
-from celery.signals import worker_init, worker_process_init
+from celery.signals import worker_process_init
 from celery.concurrency import asynpool
 
 from app import celery, db
@@ -53,7 +52,7 @@ def store_frame_metadata(parent_id, frame_ix, metadata, start_ix=0):
 @worker_process_init.connect()
 def on_worker_init(**_):
     global DETECTOR
-    if os.environ.get('CONTAINER_ROLE', '') ==  'inference':
+    if os.environ.get('CONTAINER_ROLE', '') == 'inference':
         # This import takes some time and we should avoid it unless necessary
         from app.lite_object_detector import ObjectDetector
         DETECTOR = ObjectDetector()
@@ -95,9 +94,7 @@ def resize_image(im, desired_size):
     old_size = im.shape[:2] # old_size is in (height, width) format
     ratio = float(desired_size)/max(old_size)
     new_size = tuple([int(x*ratio) for x in old_size])
-
     return cv2.resize(im, (new_size[1], new_size[0]))
-
 
 
 @celery.task(name='split_video', bind=True)
@@ -118,7 +115,8 @@ def split_video(self, video_id):
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     # Shrink resolution before chunking to speed up encoding time
-    adjust_ratio = 300/max(frame_width, frame_height)
+    desired_size = 300
+    adjust_ratio = desired_size/max(frame_width, frame_height)
     new_width = int(frame_width * adjust_ratio)
     new_height = int(frame_height * adjust_ratio)
 
@@ -147,7 +145,7 @@ def split_video(self, video_id):
                                          10,
                                          (new_width, new_height)
                                         )
-            writer.write(cv2.resize(frame, (new_width, new_height)))
+            writer.write(resize_image(frame, desired_size))
         else:
             break
     writer.release()
