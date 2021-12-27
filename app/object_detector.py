@@ -3,7 +3,7 @@ import tarfile
 import time
 
 import numpy as np
-import tensorflow as tf
+import tflite_runtime as tf
 import six.moves.urllib as urllib
 import skvideo.io
 
