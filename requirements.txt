@@ -4,7 +4,7 @@ flask
 flask-migrate
 flask-sqlalchemy
 gunicorn
-matplotlib
+#matplotlib
 pillow
 psycopg2
 redis
