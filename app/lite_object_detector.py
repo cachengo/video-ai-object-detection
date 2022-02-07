@@ -3,7 +3,7 @@ import time
 
 import cv2
 import numpy as np
-import tensorflow.contrib.lite
+import tflite_runtime.interpreter as tflite
 
 from object_detection.utils import ops as utils_ops
 from object_detection.utils import label_map_util
@@ -14,8 +14,12 @@ def import_model():
     path_to_labels = os.path.join('/models/research/object_detection/data',
                                   'mscoco_label_map.pbtxt'
                                  )
+    armnn_delegate = tflite.load_delegate( 
+	library="/armnn/build/delegate/libarmnnDelegate.so",
+        options={"backends": "CpuAcc,GpuAcc,CpuRef", "logging-severity":"info"}
+                                         )
 
-    interpreter = tensorflow.contrib.lite.Interpreter(model_path="./detect.tflite")
+    interpreter = tflite.Interpreter(model_path="./detect.tflite", experimental_delegates=[armnn_delegate])
     interpreter.allocate_tensors()
 
     category_index = label_map_util.create_category_index_from_labelmap(
@@ -113,3 +117,4 @@ class ObjectDetector:
             else:
                 break
         print('Finished video')
+
